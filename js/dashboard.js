@@ -133,6 +133,9 @@ export async function definirModuloAtivo(modulo, ativo) {
 
 // Gera um código novo de 6 dígitos, evitando colisão com um já existente.
 export async function gerarCodigoAcesso(avaliador) {
+  // Firestore rejeita setDoc/updateDoc com campo undefined — mesma causa do
+  // bug de "Falha ao salvar decisão" (conta sem o campo "usuario" salvo).
+  const nomeAvaliador = avaliador || null;
   let codigo;
   for (let tentativa = 0; tentativa < 5; tentativa++) {
     codigo = String(Math.floor(100000 + Math.random() * 900000));
@@ -141,7 +144,7 @@ export async function gerarCodigoAcesso(avaliador) {
     if (!snap.exists()) {
       await setDoc(ref, {
         usado: false,
-        criado_por: avaliador,
+        criado_por: nomeAvaliador,
         criado_em: serverTimestamp(),
         usado_em: null
       });
