@@ -90,7 +90,13 @@ export function virtusGetCurrentUser() {
         const perfilDoc = await getDoc(doc(db, "usuarios", user.uid));
         if (!perfilDoc.exists()) { resolve(null); return; }
         const data = perfilDoc.data();
-        resolve({ uid: user.uid, usuario: data.usuario, perfil: data.perfil });
+        // Contas criadas manualmente no console do Firebase (sem o campo
+        // "usuario" salvo em Firestore) caíam com usuario:undefined aqui,
+        // o que quebrava qualquer updateDoc que gravasse esse valor depois
+        // (Firestore rejeita campos undefined). Cai para o e-mail do Auth,
+        // ou "avaliador" como último recurso.
+        const usuario = data.usuario || data.nome || data.email || user.email || "avaliador";
+        resolve({ uid: user.uid, usuario, perfil: data.perfil });
       } catch (e) {
         resolve(null);
       }

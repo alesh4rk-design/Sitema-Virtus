@@ -43,10 +43,14 @@ export function assinarViolacoes(callback, onError) {
 // `avaliador` é o usuário logado (me.usuario, vindo de virtusGetCurrentUser).
 export async function definirDecisao(resultadoId, decisao, avaliador) {
   const ref = doc(db, "resultados", resultadoId);
+  // Firestore rejeita updateDoc com valor undefined em qualquer campo — o
+  // "|| null" garante que sempre vai um valor gravável, mesmo se a conta do
+  // avaliador não tiver o campo "usuario" salvo em Firestore.
+  const nomeAvaliador = avaliador || null;
   if (decisao === "pendente") {
     await updateDoc(ref, { decisao: null, decisao_por: null, decisao_em: null });
   } else {
-    await updateDoc(ref, { decisao, decisao_por: avaliador, decisao_em: serverTimestamp() });
+    await updateDoc(ref, { decisao, decisao_por: nomeAvaliador, decisao_em: serverTimestamp() });
   }
 }
 
