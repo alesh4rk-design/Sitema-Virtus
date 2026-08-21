@@ -815,18 +815,36 @@
   // avaliador), o QR é uma <img> apontando para um serviço público de
   // geração de QR Code. É só uma requisição de imagem, sem executar
   // JavaScript externo — muito mais resistente a bloqueios de rede.
-  function urlQrCode(conteudo, tamanho) {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=${tamanho}x${tamanho}&data=${encodeURIComponent(conteudo)}`;
+  // Duas fontes diferentes: se uma estiver bloqueada, tenta a outra.
+  function urlsQrCode(conteudo, tamanho) {
+    const enc = encodeURIComponent(conteudo);
+    return [
+      `https://api.qrserver.com/v1/create-qr-code/?size=${tamanho}x${tamanho}&data=${enc}`,
+      `https://quickchart.io/qr?text=${enc}&size=${tamanho}&margin=1`
+    ];
   }
 
-  // Confere se uma imagem carrega de verdade (não só se o <img> foi criado).
-  function testarImagem(src) {
+  // Confere se uma imagem carrega de verdade (não só se o <img> foi criado),
+  // com um tempo limite — senão uma URL bloqueada pode travar sem nunca
+  // disparar onload nem onerror.
+  function testarImagem(src, timeoutMs = 8000) {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('Falha ao carregar ' + src));
+      const timer = setTimeout(() => reject(new Error('Tempo esgotado ao carregar ' + src)), timeoutMs);
+      img.onload = () => { clearTimeout(timer); resolve(); };
+      img.onerror = () => { clearTimeout(timer); reject(new Error('Falha ao carregar ' + src)); };
       img.src = src;
     });
+  }
+
+  // Tenta cada fonte em sequência e retorna a primeira que carregar de verdade.
+  async function primeiraQrDisponivel(conteudo, tamanho) {
+    let ultimoErro;
+    for (const src of urlsQrCode(conteudo, tamanho)) {
+      try { await testarImagem(src); return src; }
+      catch (e) { ultimoErro = e; }
+    }
+    throw ultimoErro || new Error('Nenhuma fonte de QR Code respondeu');
   }
 
   let qrGerados = false;
@@ -845,53 +863,71 @@
       ];
       previewGrid.innerHTML = '';
       printSheets.innerHTML = '';
+      let algumOk = false;
       for (const alvo of alvos) {
-        const imgUrl = urlQrCode(alvo.url, 320);
-        await testarImagem(imgUrl); // se falhar, cai no catch e avisa o usuário
-        previewGrid.insertAdjacentHTML('beforeend', `
-          <div class="qr-preview-card">
-            <img src="${imgUrl}" style="width:100%;max-width:220px;border-radius:6px;">
-            <div class="qr-preview-nome">${escapeHtml(alvo.nome)}</div>
-            <div class="qr-preview-url">${escapeHtml(alvo.url)}</div>
-          </div>`);
-        printSheets.insertAdjacentHTML('beforeend', `
-          <div class="qr-sheet">
-            <div class="qr-sheet-frame"></div>
-            <div class="qr-sheet-corner tl"></div>
-            <div class="qr-sheet-corner tr"></div>
-            <div class="qr-sheet-corner bl"></div>
-            <div class="qr-sheet-corner br"></div>
+        try {
+          const imgPreview = await primeiraQrDisponivel(alvo.url, 320);
+          const imgSheet = await primeiraQrDisponivel(alvo.url, 300);
+          algumOk = true;
+          previewGrid.insertAdjacentHTML('beforeend', `
+            <div class="qr-preview-card">
+              <img src="${imgPreview}" style="width:100%;max-width:220px;border-radius:6px;">
+              <div class="qr-preview-nome">${escapeHtml(alvo.nome)}</div>
+              <div class="qr-preview-url">${escapeHtml(alvo.url)}</div>
+            </div>`);
+          printSheets.insertAdjacentHTML('beforeend', `
+            <div class="qr-sheet">
+              <div class="qr-sheet-frame"></div>
+              <div class="qr-sheet-corner tl"></div>
+              <div class="qr-sheet-corner tr"></div>
+              <div class="qr-sheet-corner bl"></div>
+              <div class="qr-sheet-corner br"></div>
 
-            <div class="qr-sheet-brand">
-              <div class="qr-sheet-hex">⚡</div>
-              <div class="qr-sheet-brand-name">Virtus</div>
-              <div class="qr-sheet-brand-sub">Sistema de Avaliação</div>
-            </div>
-            <div class="qr-sheet-divider"></div>
-
-            <div class="qr-sheet-titulo">${escapeHtml(alvo.nome)}</div>
-            <div class="qr-sheet-sub">${escapeHtml(alvo.sub)}</div>
-            <div class="qr-sheet-canvas-wrap"><img src="${urlQrCode(alvo.url, 300)}" width="300" height="300"></div>
-
-            <div class="qr-sheet-passos">
-              <div class="qr-sheet-passo">
-                <div class="qr-sheet-passo-num">1</div>
-                <div class="qr-sheet-passo-txt">Abra a câmera do celular</div>
+              <div class="qr-sheet-brand">
+                <div class="qr-sheet-hex">⚡</div>
+                <div class="qr-sheet-brand-name">Virtus</div>
+                <div class="qr-sheet-brand-sub">Sistema de Avaliação</div>
               </div>
-              <div class="qr-sheet-passo">
-                <div class="qr-sheet-passo-num">2</div>
-                <div class="qr-sheet-passo-txt">Aponte para o QR Code acima</div>
-              </div>
-              <div class="qr-sheet-passo">
-                <div class="qr-sheet-passo-num">3</div>
-                <div class="qr-sheet-passo-txt">Toque no link que aparecer na tela</div>
-              </div>
-            </div>
+              <div class="qr-sheet-divider"></div>
 
-            <div class="qr-sheet-footer">Sistema Virtus · Processo Seletivo</div>
-          </div>`);
+              <div class="qr-sheet-titulo">${escapeHtml(alvo.nome)}</div>
+              <div class="qr-sheet-sub">${escapeHtml(alvo.sub)}</div>
+              <div class="qr-sheet-canvas-wrap"><img src="${imgSheet}" width="300" height="300"></div>
+
+              <div class="qr-sheet-passos">
+                <div class="qr-sheet-passo">
+                  <div class="qr-sheet-passo-num">1</div>
+                  <div class="qr-sheet-passo-txt">Abra a câmera do celular</div>
+                </div>
+                <div class="qr-sheet-passo">
+                  <div class="qr-sheet-passo-num">2</div>
+                  <div class="qr-sheet-passo-txt">Aponte para o QR Code acima</div>
+                </div>
+                <div class="qr-sheet-passo">
+                  <div class="qr-sheet-passo-num">3</div>
+                  <div class="qr-sheet-passo-txt">Toque no link que aparecer na tela</div>
+                </div>
+              </div>
+
+              <div class="qr-sheet-footer">Sistema Virtus · Processo Seletivo</div>
+            </div>`);
+        } catch (e) {
+          console.error('Falha ao gerar QR de', alvo.nome, e);
+          previewGrid.insertAdjacentHTML('beforeend', `
+            <div class="qr-preview-card">
+              <div class="empty-icon">❌</div>
+              <div class="qr-preview-nome">${escapeHtml(alvo.nome)}</div>
+              <div class="qr-preview-url">Falha ao carregar o QR Code. Verifique a conexão.</div>
+            </div>`);
+        }
       }
-      qrGerados = true;
+      if (!previewGrid.children.length) {
+        previewGrid.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Nenhum QR Code pôde ser gerado. Verifique a conexão e tente novamente.</div>';
+      }
+      qrGerados = algumOk;
+      if (!algumOk) {
+        toast('❌ Falha ao gerar todos os QR Codes — verifique a conexão', 'err');
+      }
     } catch (e) {
       console.error(e);
       previewGrid.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Falha ao gerar QR Codes. Verifique a conexão e tente novamente.</div>';
