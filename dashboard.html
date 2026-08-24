@@ -207,6 +207,16 @@
   #tableBody tr.clickable { cursor:pointer; transition:background .15s; }
   #tableBody tr.clickable:hover { background:var(--amberdim); }
   .row-hint { font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--text4); letter-spacing:1px; }
+  .email-hover { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text3); cursor:default; position:relative; }
+  .email-hover::after {
+    content: attr(data-email);
+    position:absolute; left:0; top:100%; margin-top:4px; z-index:20;
+    background:var(--ink3); color:var(--text1); border:1px solid var(--line2);
+    border-radius:6px; padding:4px 9px; font-size:11px; white-space:nowrap;
+    opacity:0; pointer-events:none; transform:translateY(-3px);
+    transition:opacity .12s, transform .12s; box-shadow:0 4px 12px rgba(0,0,0,.35);
+  }
+  .email-hover:hover::after { opacity:1; transform:translateY(0); }
 
   .modal-back {
     position:fixed; inset:0; background:rgba(0,0,0,.82); backdrop-filter:blur(4px);
@@ -2276,7 +2286,7 @@
     tbody.innerHTML = lista.map(p => `
       <tr>
         <td class="td-nome">${escapeHtml(p.nome || '—')}</td>
-        <td>${escapeHtml(p.email || '—')}</td>
+        <td><span class="email-hover" data-email="${escapeHtml(p.email || '—')}">•••••</span></td>
         <td>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="btn-act btn-approve-admin"  onclick="aprovar('${p.uid}','admin')">Admin</button>
@@ -2302,7 +2312,7 @@
       return `
         <tr>
           <td class="td-nome">${escapeHtml(u.nome || '—')}${souEu ? ' <span style="color:var(--text3);font-size:11px;">(você)</span>' : ''}</td>
-          <td>${escapeHtml(u.email || '—')}</td>
+          <td><span class="email-hover" data-email="${escapeHtml(u.email || '—')}">•••••</span></td>
           <td><span class="perfil-chip perfil-${u.perfil}">${u.perfil}</span></td>
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
