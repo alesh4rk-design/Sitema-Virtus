@@ -1353,7 +1353,16 @@
   }
 
   // ── Auth gate ─────────────────────────────────────────────────────────
-  const me = await requireDashboardAccess();
+  let me = null;
+  try {
+    const p = requireDashboardAccess();
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout na autenticação')), 10000));
+    me = await Promise.race([p, timeout]);
+  } catch (e) {
+    console.error('Erro na autenticação:', e);
+    toast('❌ Erro ao autenticar: ' + e.message, 'err');
+    // Tenta continuar mesmo com erro
+  }
   if (me) {
     const nomeEl = document.getElementById('authUserName');
     if (me.usuario && me.usuario.includes('@')) {
@@ -3415,7 +3424,7 @@
       // coordenador (só lê) — viewer não tem acesso nas rules.
       if (me.perfil !== 'viewer') {
         unsubs.push(assinarPipeline(
-          mapa => { PIPELINE_MAP = mapa; renderPipeline(); renderTable(getFiltered()); },
+          mapa => { PIPELINE_MAP = mapa; renderPipeline(); },
           () => statusDot(false, 'Reconectando...')
         ));
       }
@@ -3430,27 +3439,34 @@
   // selecionado", para não misturar candidatos de dias diferentes na mesma
   // lista. Lembra a última escolha de modo entre sessões (migra valores
   // antigos 'hoje'/'ontem'/'personalizado' de versões anteriores do filtro).
-  document.getElementById('filterDia').value = dataLocalYMD(new Date());
+  const filterDiaEl = document.getElementById('filterDia');
+  if (filterDiaEl) filterDiaEl.value = dataLocalYMD(new Date());
   let periodoSalvo = localStorage.getItem(LS_PERIODO) || 'dia';
   if (periodoSalvo === 'hoje' || periodoSalvo === 'personalizado' || periodoSalvo === 'todos') periodoSalvo = 'dia';
   if (periodoSalvo === 'ontem') {
     periodoSalvo = 'dia';
     const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
-    document.getElementById('filterDia').value = dataLocalYMD(ontem);
+    if (filterDiaEl) filterDiaEl.value = dataLocalYMD(ontem);
   }
-  document.getElementById('filterPeriodo').value = periodoSalvo;
+  const filterPeriodoEl = document.getElementById('filterPeriodo');
+  if (filterPeriodoEl) filterPeriodoEl.value = periodoSalvo;
 
   // Violações e Banco de Aprovados também abrem filtrados no dia de hoje.
-  document.getElementById('violDataIni').value = dataLocalYMD(new Date());
-  document.getElementById('violDataFim').value = dataLocalYMD(new Date());
-  document.getElementById('bancoDataIni').value = dataLocalYMD(new Date());
-  document.getElementById('bancoDataFim').value = dataLocalYMD(new Date());
-
-  // Abre direto no Processo Seletivo (lista de todos os candidatos).
-  // Dashboard fica reservado para aprovados apenas.
-  try { switchView('pipeline'); } catch (e) { console.error(e); toast('❌ Erro ao abrir Processo Seletivo: ' + e.message, 'err'); }
+  const violDataIniEl = document.getElementById('violDataIni');
+  const violDataFimEl = document.getElementById('violDataFim');
+  if (violDataIniEl) violDataIniEl.value = dataLocalYMD(new Date());
+  if (violDataFimEl) violDataFimEl.value = dataLocalYMD(new Date());
+  const bancoDataIniEl = document.getElementById('bancoDataIni');
+  const bancoDataFimEl = document.getElementById('bancoDataFim');
+  if (bancoDataIniEl) bancoDataIniEl.value = dataLocalYMD(new Date());
+  if (bancoDataFimEl) bancoDataFimEl.value = dataLocalYMD(new Date());
 
   conectar();
+
+  // Abre direto no Processo Seletivo (lista de todos os candidatos).
+  // Chamado depois de conectar() e protegido: se algo falhar aqui, não pode
+  // travar o resto da inicialização (era o que deixava a tela carregando).
+  try { switchView('pipeline'); } catch (e) { console.error('Erro ao abrir Processo Seletivo:', e); }
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) conectar(); });
   window.addEventListener('online', conectar);
